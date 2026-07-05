@@ -49,7 +49,7 @@ add_definitions(-DASIO_HAS_CSTDINT)
 add_definitions(-DASIO_HAS_STD_SHARED_PTR)
 add_definitions(-DASIO_HAS_STD_TYPE_TRAITS)
 
-OPTION(BUILD_EXAMPLES "Build Library with examples" ON)
+OPTION(BUILD_EXAMPLES "Build Library with examples" OFF)
 OPTION(BUILD_TESTS "Build Library with tests" OFF)
 
 find_package(Threads)

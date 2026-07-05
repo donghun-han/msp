@@ -281,6 +281,14 @@ bool FlightController::setMotors(
     return client_.sendMessage(motor);
 }
 
+bool FlightController::setMotorOverride(
+    const std::array<uint16_t, msp::msg::N_MOTOR> &motor_values) {
+    msp::msg::SetMotorOverride motor(fw_variant_);
+    motor.motor = motor_values;
+    // high-rate control command, send without waiting for ACK
+    return client_.sendMessageNoWait(motor);
+}
+
 int FlightController::updateFeatures(const std::set<std::string> &add,
                                      const std::set<std::string> &remove) {
     // get original feature configuration
