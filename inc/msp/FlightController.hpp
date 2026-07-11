@@ -328,6 +328,14 @@ public:
     bool setMotors(const std::array<uint16_t, msp::msg::N_MOTOR> &motor_values);
 
     /**
+     * @brief Send raw per-motor override values (1000-2000) to the FC. Applied while armed
+     * only when the MSP OVERRIDE and MOTOR CTRL boxes are active. Sent without waiting for ACK.
+     * @param motor_values per-motor values, 0 for unused motors
+     * @return
+     */
+    bool setMotorOverride(const std::array<uint16_t, msp::msg::N_MOTOR> &motor_values);
+
+    /**
      * @brief Enable and disable features on the FC
      * To apply updates, changes will be written to the EEPROM and the FC will
      * reboot.

@@ -151,6 +151,7 @@ enum class ID : uint16_t {
     MSP_GPS_CONFIG                     = 132,  // out message
     MSP_COMPASS_CONFIG                 = 133,  // out message
     MSP_ESC_SENSOR_DATA                = 134,  // out message
+    MSP_MOTOR_TELEMETRY                = 139,  // out message, bidir DShot RPM (BF 4.x)
     MSP_STATUS_EX                      = 150,
     MSP_SENSOR_STATUS                  = 151,  // only iNav
     MSP_UID                            = 160,
@@ -177,6 +178,7 @@ enum class ID : uint16_t {
     MSP_SELECT_SETTING                 = 210,
     MSP_SET_HEADING                    = 211,
     MSP_SET_SERVO_CONF                 = 212,
+    MSP_SET_MOTOR_OVERRIDE             = 213,
     MSP_SET_MOTOR                      = 214,
     MSP_SET_NAV_CONFIG                 = 215,
     MSP_SET_MOTOR_3D_CONF              = 217,
@@ -3966,12 +3968,50 @@ struct EscSensorData : public Message {
             return true;
         }
         bool rc = true;
+        esc_data.clear();
         rc &= data.unpack(motor_count);
         for(int i = 0; i < motor_count(); ++i) {
             EscData esc;
             rc &= data.unpack(esc.temperature);
             rc &= data.unpack(esc.rpm);
             esc_data.push_back(esc);
+        }
+        return rc;
+    }
+};
+
+// MSP_MOTOR_TELEMETRY: 139 — Betaflight 4.x bidir DShot RPM
+struct MotorTelemetryData {
+    Value<uint32_t> rpm;
+    Value<uint16_t> invalid_pct;
+    Value<uint8_t>  temperature;
+    Value<uint16_t> voltage;
+    Value<uint16_t> current;
+    Value<uint16_t> consumption;
+};
+
+struct MotorTelemetry : public Message {
+    MotorTelemetry(FirmwareVariant v) : Message(v) {}
+
+    virtual ID id() const override { return ID::MSP_MOTOR_TELEMETRY; }
+
+    Value<uint8_t> motor_count;
+    std::vector<MotorTelemetryData> motor_data;
+
+    virtual bool decode(const ByteVector& data) override {
+        if(data.empty()) { motor_count = 0; return true; }
+        bool rc = true;
+        motor_data.clear();
+        rc &= data.unpack(motor_count);
+        for(int i = 0; i < motor_count(); ++i) {
+            MotorTelemetryData m;
+            rc &= data.unpack(m.rpm);
+            rc &= data.unpack(m.invalid_pct);
+            rc &= data.unpack(m.temperature);
+            rc &= data.unpack(m.voltage);
+            rc &= data.unpack(m.current);
+            rc &= data.unpack(m.consumption);
+            motor_data.push_back(m);
         }
         return rc;
     }
@@ -4530,6 +4570,24 @@ struct SetServoConf : public Message {
         }
         rc &= data->pack(forward_from_channel);
         rc &= data->pack(reversed_sources);
+        if(!rc) data.reset();
+        return data;
+    }
+};
+
+// MSP_SET_MOTOR_OVERRIDE: 213
+struct SetMotorOverride : public Message {
+    SetMotorOverride(FirmwareVariant v) : Message(v) {}
+
+    virtual ID id() const override { return ID::MSP_SET_MOTOR_OVERRIDE; }
+
+    std::array<uint16_t, N_MOTOR> motor;
+
+    virtual ByteVectorUptr encode() const override {
+        ByteVectorUptr data = std::make_unique<ByteVector>();
+        bool rc             = true;
+        for(size_t i(0); i < N_MOTOR; i++) rc &= data->pack(motor[i]);
+        assert(data->size() == N_MOTOR * 2);
         if(!rc) data.reset();
         return data;
     }
