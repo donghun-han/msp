@@ -92,6 +92,11 @@ void FlightController::setLoggingLevel(const msp::client::LoggingLevel &level) {
     client_.setLoggingLevel(level);
 }
 
+void FlightController::setReadThreadScheduling(int cpu_affinity,
+                                               int rt_priority) {
+    client_.setReadThreadScheduling(cpu_affinity, rt_priority);
+}
+
 void FlightController::setFlightMode(FlightMode mode) {
     {
         std::lock_guard<std::mutex> lock(msp_updates_mutex);
@@ -197,6 +202,14 @@ msp::FirmwareVariant FlightController::getFwVariant() const {
 }
 
 int FlightController::getProtocolVersion() const { return msp_version_; }
+
+bool FlightController::setProtocolVersion(const int version) {
+    if(!client_.setVersion(version)) {
+        return false;
+    }
+    msp_version_ = version;
+    return true;
+}
 
 std::string FlightController::getBoardName() const { return board_name_; }
 

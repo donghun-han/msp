@@ -55,6 +55,13 @@ public:
     void setLoggingLevel(const LoggingLevel& level);
 
     /**
+     * @brief Set Linux scheduling options for the serial read thread.
+     * @param cpu_affinity CPU index, or -1 to leave affinity unchanged.
+     * @param rt_priority SCHED_FIFO priority, or 0 to leave policy unchanged.
+     */
+    void setReadThreadScheduling(int cpu_affinity, int rt_priority);
+
+    /**
      * @brief Change the device path on the next connect
      * @param ver Version of MSP to use
      * @return True if successful
@@ -343,6 +350,8 @@ protected:
     // read thread management
     std::thread thread;
     std::atomic_flag running_ = ATOMIC_FLAG_INIT;
+    int read_thread_cpu_affinity_ = -1;
+    int read_thread_rt_priority_ = 0;
 
     // thread safety and synchronization
     std::condition_variable cv_response;

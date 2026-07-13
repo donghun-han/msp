@@ -219,7 +219,11 @@ enum class ID : uint16_t {
     MSP2_INAV_SET_BATTERY_CONFIG = 0x2006,
     MSP2_INAV_RATE_PROFILE       = 0x2007,
     MSP2_INAV_SET_RATE_PROFILE   = 0x2008,
-    MSP2_INAV_AIR_SPEED          = 0x2009
+    MSP2_INAV_AIR_SPEED          = 0x2009,
+
+    MSP2_BETAFLIGHT_SENSOR_STREAM_CONFIG     = 0x300B,
+    MSP2_BETAFLIGHT_SET_SENSOR_STREAM_CONFIG = 0x300C,
+    MSP2_BETAFLIGHT_SENSOR_STREAM_FRAME      = 0x300D
 };
 
 enum class ArmingFlags : uint32_t {
@@ -313,6 +317,39 @@ const static size_t MAX_SIMULTANEOUS_ADJUSTMENT_COUNT = 6;
 const static size_t OSD_ITEM_COUNT = 41;  // manual count from iNav io/osd.h
 
 const static size_t MAX_MAPPABLE_RX_INPUTS = 4;  // unique to REVO?
+
+struct SetSensorStreamConfig : public Message {
+    SetSensorStreamConfig(FirmwareVariant v) : Message(v) {}
+
+    virtual ID id() const override { return ID::MSP2_BETAFLIGHT_SET_SENSOR_STREAM_CONFIG; }
+
+    bool enabled = false;
+    uint16_t rate_hz = 500;
+    uint16_t fields = 0x7f;
+
+    virtual ByteVectorUptr encode() const override {
+        ByteVectorUptr data = std::make_unique<ByteVector>();
+        bool rc = true;
+        rc &= data->pack(uint8_t(enabled ? 1 : 0));
+        rc &= data->pack(rate_hz);
+        rc &= data->pack(fields);
+        if(!rc) data.reset();
+        return data;
+    }
+};
+
+struct SensorStreamFrame : public Message {
+    SensorStreamFrame(FirmwareVariant v) : Message(v) {}
+
+    virtual ID id() const override { return ID::MSP2_BETAFLIGHT_SENSOR_STREAM_FRAME; }
+
+    ByteVector payload;
+
+    virtual bool decode(const ByteVector& data) override {
+        payload = data;
+        return true;
+    }
+};
 
 const static size_t LED_MODE_COUNT          = 6;
 const static size_t LED_DIRECTION_COUNT     = 6;

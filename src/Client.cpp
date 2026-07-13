@@ -1,6 +1,10 @@
 #include <Client.hpp>
+#include <cerrno>
+#include <cstring>
 #include <cstdlib>
 #include <iostream>
+#include <pthread.h>
+#include <sched.h>
 
 typedef unsigned int uint;
 
@@ -16,6 +20,12 @@ Client::Client() :
 Client::~Client() {}
 
 void Client::setLoggingLevel(const LoggingLevel& level) { log_level_ = level; }
+
+void Client::setReadThreadScheduling(int cpu_affinity, int rt_priority)
+{
+    read_thread_cpu_affinity_ = cpu_affinity;
+    read_thread_rt_priority_ = rt_priority;
+}
 
 bool Client::setVersion(const int& ver) {
     if(ver == 1 || ver == 2) {
@@ -77,6 +87,41 @@ bool Client::startReadThread() {
     if(running_.test_and_set()) return false;
     // hit it!
     thread = std::thread([this] {
+        if(read_thread_cpu_affinity_ >= 0) {
+            cpu_set_t cpuset;
+            CPU_ZERO(&cpuset);
+            CPU_SET(read_thread_cpu_affinity_, &cpuset);
+            const int ret = pthread_setaffinity_np(
+                pthread_self(), sizeof(cpuset), &cpuset);
+            if(ret != 0) {
+                std::cerr << "failed to set MSP read thread CPU affinity to CPU "
+                          << read_thread_cpu_affinity_ << ": "
+                          << std::strerror(ret) << std::endl;
+            }
+        }
+
+        if(read_thread_rt_priority_ > 0) {
+            const int min_priority = sched_get_priority_min(SCHED_FIFO);
+            const int max_priority = sched_get_priority_max(SCHED_FIFO);
+            if(read_thread_rt_priority_ < min_priority ||
+               read_thread_rt_priority_ > max_priority) {
+                std::cerr << "invalid MSP read thread SCHED_FIFO priority "
+                          << read_thread_rt_priority_ << "; valid range is "
+                          << min_priority << "-" << max_priority << std::endl;
+            }
+            else {
+                sched_param param{};
+                param.sched_priority = read_thread_rt_priority_;
+                const int ret =
+                    pthread_setschedparam(pthread_self(), SCHED_FIFO, &param);
+                if(ret != 0) {
+                    std::cerr << "failed to set MSP read thread SCHED_FIFO priority "
+                              << read_thread_rt_priority_ << ": "
+                              << std::strerror(ret) << std::endl;
+                }
+            }
+        }
+
         asio::async_read_until(port,
                                buffer,
                                std::bind(&Client::messageReady,
@@ -296,11 +341,25 @@ void Client::processOneMessage(const asio::error_code& ec,
         return;
     }
 
-    // ignore and remove header bytes
-    const uint8_t msg_marker = extractChar();
-    if(msg_marker != '$')
-        std::cerr << "Message marker " << size_t(msg_marker)
-                  << " is not recognised!" << std::endl;
+    const auto queue_next_read = [this] {
+        asio::async_read_until(port,
+                               buffer,
+                               std::bind(&Client::messageReady,
+                                         this,
+                                         std::placeholders::_1,
+                                         std::placeholders::_2),
+                               std::bind(&Client::processOneMessage,
+                                         this,
+                                         std::placeholders::_1,
+                                         std::placeholders::_2));
+    };
+
+    // Discard stale bytes until the next MSP marker. This can happen when the
+    // FC is already pushing stream frames before the client read thread starts.
+    uint8_t msg_marker = extractChar();
+    while(msg_marker != '$') {
+        msg_marker = extractChar();
+    }
 
     // message version
     int ver                  = 0;
@@ -310,6 +369,8 @@ void Client::processOneMessage(const asio::error_code& ec,
     if(ver == 0) {
         std::cerr << "Version marker " << size_t(ver_marker)
                   << " is not recognised!" << std::endl;
+        queue_next_read();
+        return;
     }
 
     ReceivedMessage recv_msg;
@@ -337,16 +398,7 @@ void Client::processOneMessage(const asio::error_code& ec,
         }
     }
 
-    asio::async_read_until(port,
-                           buffer,
-                           std::bind(&Client::messageReady,
-                                     this,
-                                     std::placeholders::_1,
-                                     std::placeholders::_2),
-                           std::bind(&Client::processOneMessage,
-                                     this,
-                                     std::placeholders::_1,
-                                     std::placeholders::_2));
+    queue_next_read();
 
     if(log_level_ >= DEBUG)
         std::cout << "processOneMessage finished" << std::endl;

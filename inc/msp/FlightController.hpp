@@ -112,6 +112,13 @@ public:
     int getProtocolVersion() const;
 
     /**
+     * @brief Sets the MSP protocol version for outbound messages.
+     * @param version 1 for MSPv1, 2 for MSPv2 native.
+     * @return True when the version is accepted.
+     */
+    bool setProtocolVersion(const int version);
+
+    /**
      * @brief Queries the currently set board name
      * @return std::String of the board name
      */
@@ -123,6 +130,13 @@ public:
      * to WARNING)
      */
     void setLoggingLevel(const msp::client::LoggingLevel &level);
+
+    /**
+     * @brief Set Linux scheduling options for the MSP serial read thread.
+     * @param cpu_affinity CPU index, or -1 to leave affinity unchanged.
+     * @param rt_priority SCHED_FIFO priority, or 0 to leave policy unchanged.
+     */
+    void setReadThreadScheduling(int cpu_affinity, int rt_priority);
 
     /**
      * @brief Set RC channels in order: roll, pitch, yaw, throttle by using
